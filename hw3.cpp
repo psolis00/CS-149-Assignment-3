@@ -6,7 +6,6 @@
 
 pthread_cond_t cond     = PTHREAD_COND_INITIALIZER; 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;  
-int timer = 0;
 
 struct threads{
 	pthread_t t;
@@ -14,6 +13,7 @@ struct threads{
 	int number;
 	int queue[10];
 	int customer[10];
+	int timer;
 }threads;
 
 char seat[10][40];
@@ -26,7 +26,6 @@ void initSeats()
 		{
 			seat[i][j] = '-';
 		}
-		printf("\n");
 	}
 }
 
@@ -109,7 +108,7 @@ void addSeat(char seller, int number, int customer)
  	}
  	else if(seller == 'M')
  	{
- 		int modifier = 1;
+ 		int modifier = 0;
  		for(int i = 4; i < 10; i+= modifier)
  		{
  			for(int j = 0; j < 40; j+= 4)
@@ -128,10 +127,14 @@ void addSeat(char seller, int number, int customer)
  			{
  				break;
  			}
- 			if((i%2) < -1)
+ 			if(modifier == 0)
  			{
- 				modifier--;
+ 				modifier++;
+ 			}
+ 			else if((modifier%2) == 0 || (modifier%2) == -1)
+ 			{
  				modifier = 0 - modifier;
+ 				modifier++;
  			}
  			else
  			{
@@ -187,15 +190,14 @@ void dequeue(int queue[10])
 
 bool queueIsEmpty(int queue[10])
 {	
-	bool valid = true;
 	for(int i = 0; i < 10; i++)
 	{
 		if(queue[i] > 0)
 		{
-			valid = false;
+			return  false;
 		}
 	}
-	return valid;
+	return true;
 }
 
 //A random time will be given to each customer 
@@ -241,30 +243,45 @@ void printCustomers(int queue[10])
 void *sell(void *threads)
  {
  	struct threads *t = (struct threads *) threads;
- 	while(!seatsAreFull() || timer < 60)
+ 	while(!seatsAreFull() && t->timer < 60)
  	{
- 		if(timer == t->customer[0])
+ 		pthread_mutex_lock(&mutex);
+ 		pthread_cond_wait(&cond, &mutex);
+ 		bool all = false;
+ 		while(!all)
  		{
- 			enqueue(t->queue, t->customer[0]);
- 		}
- 		if(!queueIsEmpty(t->queue))
- 		{
-
- 			pthread_mutex_lock(&mutex);
-
- 			printCustomers(t->queue);
- 			if(queueIsEmpty(t->queue) )
- 			{
- 				printf("\ntrue\n");
+ 			all = true;
+			if(t->timer == t->customer[0])
+			{
+				all = false;
+				printf("Time %i - Customer %i arrived in %c%i's queue\n", t->timer, t->customer[0],t->seller,t->number);
+				printCustomers(t->customer);
+				enqueue(t->queue, t->customer[0]);
+				dequeue(t->customer);
+				printCustomers(t->customer);
+				printCustomers(t->queue);
  			}
+ 		}
+  		//printf("time %i: %c%i\n\n", t->timer, t->seller, t->number);
+  		//printf("%c%i: \n",t->seller, t->number);
+ 		//printCustomers(t->customer);
+ 		
 
-			printf("%i\n", timer);
+
+ 		while(!queueIsEmpty(t->queue))
+ 		{
     		addSeat(t->seller, t->number, t->queue[0]);
+    		printf("Time %i - Customer %i bought a ticket at %c%i%i\n",t->timer, t->queue[0], t->seller, t->number,t->queue[0]);
+    		printf("Time %i - Customer %i leaves\n\n", t->timer, t->queue[0]);
     		dequeue(t->queue);
-   			printSeats();
-   
-  		  	pthread_mutex_unlock(&mutex);
-  		} 
+    		printSeats();
+   		}
+
+  		pthread_mutex_unlock(&mutex);
+  		pthread_cond_signal(&cond);	
+
+  		t->timer++;
+
 	}
     // Serve any buyer available in this seller queue that is ready             
     // now to buy ticket till done with all relevant buyers in their queue
@@ -294,9 +311,11 @@ int main()
      t[i].t = tids[i];
      t[i].seller = seller_type;
      t[i].number = number;
+     t[i].timer = 0;
      initQueues(t[i].queue);
      createCustomerArray(t[i].customer);
-     sortCustomerArray(t[i].queue); 
+     sortCustomerArray(t[i].customer); 
+
      pthread_create(&tids[i], NULL, sell, &t[i]);
 
      seller_type = 'M';
@@ -304,13 +323,14 @@ int main()
 	  
 	 for (i = 1; i < 4; i++)
 	 {
-	 	initQueues(t[i].queue);
-	 	createCustomerArray(t[i].queue);
-	 	sortCustomerArray(t[i].queue); 
 	 	number++;
 	 	t[i].t = tids[i];
      	t[i].seller = seller_type;
      	t[i].number = number;
+	 	initQueues(t[i].queue);
+	 	createCustomerArray(t[i].customer);
+	 	sortCustomerArray(t[i].customer); 
+
 	   	pthread_create(&tids[i], NULL, sell, &t[i]);
 	  }
 
@@ -318,13 +338,15 @@ int main()
 	 seller_type = 'L';
 
 	 for (i = 4; i < 10; i++) 
-	 {	number++;
-	 	initQueues(t[i].queue);
+	 {
+	 	number++;
 	 	t[i].t = tids[i];
      	t[i].seller = seller_type;
-     	t[i].number = number;
-     	createCustomerArray(t[i].queue);
-     	sortCustomerArray(t[i].queue);        
+     	t[i].number = number;  
+	 	initQueues(t[i].queue);
+	 	createCustomerArray(t[i].customer);
+     	sortCustomerArray(t[i].customer);     
+
 	  	pthread_create(&tids[i], NULL, sell, &t[i]); 
 	  }
 
@@ -337,10 +359,9 @@ int main()
 
 
 	 // Printout simulation results
-     
-
-
-	 exit(0); 
+	  printSeats();
+	 	
+	 	exit(0); 
 }
 
 
