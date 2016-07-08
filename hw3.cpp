@@ -240,9 +240,8 @@ void printCustomers(int queue[10])
 	printf("\n");
 }
 
-void minutesPassed(char seller)
+void minutesPassed(	int &minutes, char seller)
 {
-	int minutes;
 	if(seller =='H')
 	{
 		minutes = rand() % (1 + 1 - 1) + 1;
@@ -257,6 +256,7 @@ void minutesPassed(char seller)
 	{
 		minutes = rand() % (7 + 1 - 4) + 4;
 		sleep(minutes/100000);
+		
 	}
 	pthread_cond_signal(&cond);
 }
@@ -265,11 +265,6 @@ void minutesPassed(char seller)
 void *sell(void *threads)
  {
  	struct threads *t = (struct threads *) threads;
- 	//clock_t start = clock();
- 	//float duration = ((float)clock() - (float)start) /100000;
- 	//printf("%.2f", duration);
-
-
 
  	while(!seatsAreFull() && t->timer < 60)
  	{
@@ -288,12 +283,15 @@ void *sell(void *threads)
 
  		while(!queueIsEmpty(t->queue))
  		{
+ 			int passed = 0;
  			pthread_mutex_lock(&mutex);
 			pthread_cond_wait(&cond, &mutex);
     		addSeat(t->seller, t->number, t->queue[0]);
     		printf("Time %i - Customer %i bought a ticket at %c%i%i%i\n",t->timer, t->queue[0], t->seller, t->number,(t->queue[0]/10), (t->queue[0]%10));
-    		minutesPassed(t->seller);
-    		printf("Time %i - Customer %i leaves\n\n", t->timer, t->queue[0]);
+
+    		minutesPassed(passed, t->seller);
+    		
+    		printf("Time %i - Customer %i leaves\n\n", (t->timer + passed), t->queue[0]);
     		dequeue(t->queue);
 
   			pthread_mutex_unlock(&mutex);
